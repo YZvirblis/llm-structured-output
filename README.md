@@ -1,4 +1,5 @@
 # Structured output from a model that also has to write prose
+![tests](https://github.com/YZvirblis/llm-structured-output/actions/workflows/test.yml/badge.svg)
 
 A small, dependency-free TypeScript utility for pulling reliable structured data
 out of a language-model response **without** giving up the free-form prose in the
