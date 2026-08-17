@@ -175,7 +175,7 @@ npm run build
 ```
 
 ```ts
-import { extractProtocolBlocks } from "llm-structured-output";
+import { extractProtocolBlocks } from "./src/index.js";
 
 const { narrative, diceRequest, imageRequest } = extractProtocolBlocks(modelResponseText);
 
@@ -185,8 +185,7 @@ const { narrative, diceRequest, imageRequest } = extractProtocolBlocks(modelResp
 ```
 
 The entry point is `src/index.ts`, built to `dist/` — run `npm run build` before
-importing. Against the TypeScript source directly, the specifier is
-`./src/index.js`.
+importing.
 
 `extractProtocolBlocks` is the only function whose narrative is reader-safe.
 `extractDiceRequest` and `extractImageRequest` are also exported, but they are
