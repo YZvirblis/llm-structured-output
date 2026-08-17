@@ -27,6 +27,7 @@ import {
   tidyNarrative,
 } from "./patterns.js";
 import { normalizeImageRequest } from "./normalize.js";
+import { sweepNarrative } from "./sweep.js";
 import type { DiceRequest, ImageRequest } from "./types.js";
 import { isValidDiceRequest, isValidImageRequest } from "./validate.js";
 
@@ -99,13 +100,23 @@ export function extractImageRequest(text: string): {
 }
 
 /**
- * Run both extractors over one response, in the order the production caller
- * uses them.
+ * THE PUBLIC ENTRY POINT. Run both extractors over one response, then sweep
+ * the result.
  *
  * Dice first, then image over the already-dice-stripped narrative. The two
  * patterns never overlap, so the order does not affect what is found — it
  * only guarantees each pass sees text the other has already cleaned,
  * regardless of the order the model emitted the blocks in.
+ *
+ * `sweepNarrative` runs last, over whatever the strip passes left behind. The
+ * strips remove blocks; the sweep removes the debris a removed block leaves —
+ * chiefly the empty markdown fence the model wrapped it in. Only the narrative
+ * this function returns is reader-safe.
+ *
+ * `extractDiceRequest` and `extractImageRequest` are stage-level primitives:
+ * they are exported for testing and for callers assembling their own pipeline,
+ * and their output is NOT swept. Anything rendered to a reader should come
+ * from here, or be passed through `sweepNarrative` explicitly.
  */
 export function extractProtocolBlocks(text: string): {
   narrative: string;
@@ -113,6 +124,6 @@ export function extractProtocolBlocks(text: string): {
   imageRequest: ImageRequest | null;
 } {
   const { narrative: afterDice, diceRequest } = extractDiceRequest(text);
-  const { narrative, imageRequest } = extractImageRequest(afterDice);
-  return { narrative, diceRequest, imageRequest };
+  const { narrative: afterImage, imageRequest } = extractImageRequest(afterDice);
+  return { narrative: sweepNarrative(afterImage), diceRequest, imageRequest };
 }

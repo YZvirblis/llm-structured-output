@@ -361,10 +361,13 @@ describe("known limitations (pinned, not endorsed)", () => {
     expect(narrative).toContain("IMAGE_REQUEST"); // <- the leak, documented
   });
 
-  it("leaves an orphan fence behind a dice block (asymmetric with images)", () => {
-    // The dice strip pattern removes the JSON only. Ported as-is: a dice
-    // block ends a beat and the model stops there, so a trailing empty code
-    // box is far less visible than one mid-paragraph. Still a rough edge.
+  it("leaves an orphan fence behind at the DICE STAGE (asymmetric with images)", () => {
+    // The dice strip pattern removes the JSON only, where the image strip
+    // takes the fence with it. Ported as-is, and still visible here because
+    // the stage-level extractors are not swept.
+    //
+    // This asymmetry no longer reaches a reader: `sweepNarrative` clears the
+    // empty fence at the entry point. See the entry-point suite below.
     const text = `You test the lock.\n\n${FENCE}\n${validDice}\n${FENCE}`;
 
     const { narrative, diceRequest } = extractDiceRequest(text);
@@ -372,5 +375,97 @@ describe("known limitations (pinned, not endorsed)", () => {
     expect(diceRequest).not.toBeNull();
     expect(narrative).not.toContain("DICE_REQUEST"); // the JSON does go
     expect(narrative).toContain(FENCE); // the fence does not
+  });
+});
+
+// ───────────────────────────────────────── entry point: the final sweep ──
+//
+// `extractProtocolBlocks` is the only function whose narrative is
+// reader-safe. It runs the strip pipeline and then sweeps the debris the
+// strips leave behind.
+
+describe("extractProtocolBlocks — final sweep", () => {
+  it("clears the empty fence the dice strip used to leave behind", () => {
+    // The case pinned as a limitation at the stage level above.
+    const text = `You test the lock.\n\n${FENCE}\n${validDice}\n${FENCE}`;
+
+    const { narrative, diceRequest } = extractProtocolBlocks(text);
+
+    expect(diceRequest).not.toBeNull();
+    expect(narrative).toBe("You test the lock.");
+    expect(narrative).not.toContain(FENCE);
+  });
+
+  it("leaves clean prose after a REJECTED dice block inside a fence", () => {
+    const bad = `{"type":"DICE_REQUEST","player":"char-abc","diceType":"d20","modifier":"+3","modifierSource":"Athletics (STR)","reason":"Hauling the portcullis"}`;
+    const text = `The portcullis is heavier than it looks.\n\n${FENCE}\n${bad}\n${FENCE}\n\nIt does not budge.`;
+
+    const { narrative, diceRequest } = extractProtocolBlocks(text);
+
+    expect(diceRequest).toBeNull(); // rejected...
+    expect(narrative).toBe(
+      "The portcullis is heavier than it looks.\n\nIt does not budge.",
+    ); // ...and no trace of it survives
+    expect(narrative).not.toContain("DICE_REQUEST");
+    expect(narrative).not.toContain(FENCE);
+    expect(narrative).not.toMatch(/\n{3,}/);
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it("leaves clean prose after a REJECTED image block inside a fence", () => {
+    const bad = `{"type":"IMAGE_REQUEST","subject":"creature","subjectId":"grey-wolf","prompt":"a grey wolf on a ridge","caption":"The Wolf","tone":"dark"}`;
+    const text = `Something moves on the ridge.\n\n${FENCE}json\n${bad}\n${FENCE}\n\nThe wind shifts.`;
+
+    const { narrative, imageRequest } = extractProtocolBlocks(text);
+
+    expect(imageRequest).toBeNull();
+    expect(narrative).toBe("Something moves on the ridge.\n\nThe wind shifts.");
+    expect(narrative).not.toContain("IMAGE_REQUEST");
+    expect(narrative).not.toContain(FENCE);
+    expect(narrative).not.toMatch(/\n{3,}/);
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it("preserves a legitimate non-empty code fence in the narrative", () => {
+    const text = `The runes on the door read:\n\n${FENCE}\nELDER SIGN\nOPEN BY BLOOD\n${FENCE}\n\nYou step back.\n\n${validDice}`;
+
+    const { narrative, diceRequest } = extractProtocolBlocks(text);
+
+    expect(diceRequest).not.toBeNull();
+    expect(narrative).toBe(
+      `The runes on the door read:\n\n${FENCE}\nELDER SIGN\nOPEN BY BLOOD\n${FENCE}\n\nYou step back.`,
+    );
+  });
+
+  it("passes prose with no protocol blocks through byte-identical", () => {
+    const text =
+      "The tavern is tense. Every patron seems to be minding their own business a " +
+      "little too carefully.\n\nWhat do you do?";
+
+    expect(extractProtocolBlocks(text)).toEqual({
+      narrative: text,
+      diceRequest: null,
+      imageRequest: null,
+    });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("does not silently fix the matcher's truncated-block limitation", () => {
+    // The sweep removes debris, not JSON fragments. Deciding where an
+    // unterminated block ends is the balanced-delimiter problem the matcher
+    // deliberately does not solve, so this still leaks — by design.
+    const truncated = `{"type":"DICE_REQUEST","player":"char-abc","diceType":"d20","modifier":3,"modifierSource":"Perc`;
+
+    const { narrative } = extractProtocolBlocks(`You scan the treeline.\n\n${truncated}`);
+
+    expect(narrative).toContain("DICE_REQUEST");
+  });
+
+  it("does not silently fix the matcher's nested-brace limitation", () => {
+    const nested = `{"type":"IMAGE_REQUEST","subject":"npc","prompt":"an innkeeper","meta":{"seed":7},"tone":"dark"}`;
+
+    const { narrative } = extractProtocolBlocks(`Prose. ${nested}`);
+
+    expect(narrative).toContain("IMAGE_REQUEST");
   });
 });

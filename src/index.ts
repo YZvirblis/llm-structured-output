@@ -26,6 +26,8 @@ export {
 
 export { normalizeImageRequest } from "./normalize.js";
 
+export { sweepNarrative } from "./sweep.js";
+
 export {
   extractDiceRequest,
   extractImageRequest,
